@@ -262,11 +262,12 @@
    Leave API_URL empty to run in local mode (saved in this browser).
    ============================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyEZM84Y4VUhiChLQ9TFntARxWs18yThUpNuqDkNxDCa2UHFlZo6th5XMJtwqrWML6_Eg/exec',   // e.g. 'https://script.google.com/macros/s/AKfyc.../exec'
+  API_URL: '',   // e.g. 'https://script.google.com/macros/s/AKfyc.../exec'
   TOKEN: ''      // only if you set SECRET in Code.gs
 };
 
 const STARTER_TASKS = ['Drink 2 litres of water', 'Walk 5,000 steps'];
+const IS_LOCAL = !CONFIG.API_URL;
 
 /* ---------- date helpers (local) ---------- */
 function dateKey(d) {
@@ -286,7 +287,7 @@ function isSameDay(a, b) { return dateKey(a) === dateKey(b); }
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-/* ---------- backend: remote (Apps Script) or local ---------- */
+/* ---------- remote API (Apps Script) ---------- */
 async function apiGet(action, extra) {
   const u = new URL(CONFIG.API_URL);
   u.searchParams.set('action', action);
@@ -308,110 +309,80 @@ const remote = {
   toggle: (taskId, date, done) => apiPost({ action: 'toggle', taskId, date, done })
 };
 
-const LS_TASKS = 'dc_tasks', LS_LOG = 'dc_log', LS_INIT = 'dc_init';
-const lsTasks = () => JSON.parse(localStorage.getItem(LS_TASKS) || '[]');
-const lsLog   = () => JSON.parse(localStorage.getItem(LS_LOG) || '{}');
+/* ---------- local cache (instant source of truth for the UI) ---------- */
+const CACHE_KEY = 'dc_cache';
+let tasks = [];          // [{id,title}]
+let doneByDate = {};     // { 'YYYY-MM-DD': [ids] }
+let weekCounts = {};     // { 'YYYY-MM-DD': number }
 const uid = () => 't' + Date.now() + Math.random().toString(36).slice(2, 6);
-function seedLocal() {
-  if (localStorage.getItem(LS_INIT)) return;
-  localStorage.setItem(LS_TASKS, JSON.stringify(STARTER_TASKS.map(t => ({ id: uid(), title: t }))));
-  localStorage.setItem(LS_INIT, '1');
+
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (c) { tasks = c.tasks || []; doneByDate = c.doneByDate || {}; weekCounts = c.weekCounts || {}; return true; }
+  } catch (e) {}
+  return false;
 }
-function weekCounts(date) {
-  const log = lsLog(); const mon = mondayOf(date); const counts = {};
-  for (let i = 0; i < 7; i++) { const k = dateKey(addDays(mon, i)); counts[k] = (log[k] || []).length; }
-  return counts;
+function saveCache() {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ v: 1, tasks, doneByDate, weekCounts }));
 }
-const local = {
-  async getState(date) {
-    const log = lsLog(); const d = new Date(date + 'T00:00:00');
-    return { ok: true, tasks: lsTasks(), done: log[date] || [], week: { counts: weekCounts(d) } };
-  },
-  async addTask(title) {
-    const t = { id: uid(), title: title.trim() };
-    const a = lsTasks(); a.push(t); localStorage.setItem(LS_TASKS, JSON.stringify(a));
-    return { ok: true, task: t };
-  },
-  async editTask(id, title) {
-    const a = lsTasks().map(t => t.id === id ? { ...t, title: title.trim() } : t);
-    localStorage.setItem(LS_TASKS, JSON.stringify(a));
-    return { ok: true };
-  },
-  async deleteTask(id) {
-    localStorage.setItem(LS_TASKS, JSON.stringify(lsTasks().filter(t => t.id !== id)));
-    const log = lsLog(); Object.keys(log).forEach(d => { log[d] = log[d].filter(x => x !== id); });
-    localStorage.setItem(LS_LOG, JSON.stringify(log));
-    return { ok: true };
-  },
-  async toggle(taskId, date, done) {
-    const log = lsLog(); const set = new Set(log[date] || []);
-    done ? set.add(taskId) : set.delete(taskId);
-    log[date] = [...set]; localStorage.setItem(LS_LOG, JSON.stringify(log));
-    return { ok: true };
-  }
-};
-const IS_LOCAL = !CONFIG.API_URL;
-const backend = IS_LOCAL ? local : remote;
-if (IS_LOCAL) seedLocal();
 
 /* ---------- state ---------- */
 let selected = new Date();
-let tasks = [];
-let doneSet = new Set();
-let weekData = { counts: {} };
 let confirmingId = null;
 let editingId = null;
-
 const el = (id) => document.getElementById(id);
 const RING_C = 2 * Math.PI * 42;
+const selKey = () => dateKey(selected);
 
+/* ---------- status line ---------- */
 function status(kind, text) { el('dot').className = 'dot ' + (kind || ''); el('footText').textContent = text; }
-function idleStatus() {
-  if (IS_LOCAL) status('', 'Saved in this browser. Add your Apps Script URL to sync across devices.');
-  else status('ok', 'Synced');
-}
+function synced() { status('ok', 'Synced'); }
+function idleLocal() { status('', 'Saved in this browser. Add your Apps Script URL to sync across devices.'); }
 
 /* ---------- render ---------- */
-function doneCount() { const ids = new Set(tasks.map(t => t.id)); let n = 0; doneSet.forEach(id => { if (ids.has(id)) n++; }); return n; }
-
+function countDone(k) {
+  const ids = new Set(tasks.map(t => t.id));
+  let n = 0; (doneByDate[k] || []).forEach(id => { if (ids.has(id)) n++; });
+  return n;
+}
 function paintHero() {
   el('weekday').textContent = WEEKDAYS[selected.getDay()];
   el('fulldate').textContent = `${selected.getDate()} ${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`;
   el('backToday').hidden = isSameDay(selected, new Date());
 
-  const total = tasks.length, done = doneCount();
+  const total = tasks.length, done = countDone(selKey());
   const pct = total ? done / total : 0;
-  el('ringBar').style.strokeDashoffset = (RING_C * (1 - pct)).toFixed(2);
   el('ringBar').setAttribute('stroke-dasharray', RING_C.toFixed(2));
+  el('ringBar').style.strokeDashoffset = (RING_C * (1 - pct)).toFixed(2);
   el('ringDone').textContent = done;
   el('ringTotal').textContent = '/' + total;
   el('todayStat').innerHTML = `${done} done <em>of ${total}</em>`;
-
   paintWeek(total);
 }
-
 function paintWeek(total) {
   const mon = mondayOf(selected);
   const todayKey = dateKey(new Date());
-  const selKey = dateKey(selected);
+  const selK = selKey();
   const initials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   let weekDone = 0, weekTotal = 0;
   const box = el('week'); box.innerHTML = '';
 
   for (let i = 0; i < 7; i++) {
     const d = addDays(mon, i); const key = dateKey(d);
-    const doneN = weekData.counts[key] || 0;
+    let doneN = weekCounts[key];
+    if (doneN === undefined) doneN = (doneByDate[key] || []).length;
     const future = key > todayKey;
     if (!future) { weekDone += doneN; weekTotal += total; }
     const ratio = total ? Math.min(1, doneN / total) : 0;
 
     const cell = document.createElement('div');
-    cell.className = 'day' + (key === todayKey ? ' today' : '') + (key === selKey ? ' sel' : '') + (future ? ' future' : '');
+    cell.className = 'day' + (key === todayKey ? ' today' : '') + (key === selK ? ' sel' : '') + (future ? ' future' : '');
     const pie = document.createElement('div');
     pie.className = 'pie' + (ratio > 0 ? ' filled' : '');
     if (ratio > 0) {
-      const pct = Math.round(ratio * 100);
-      pie.style.background = `conic-gradient(var(--accent) ${pct}%, var(--ring-track) 0)`;
+      const p = Math.round(ratio * 100);
+      pie.style.background = `conic-gradient(var(--accent) ${p}%, var(--ring-track) 0)`;
     }
     const label = document.createElement('div');
     label.className = 'dl'; label.textContent = initials[i];
@@ -419,10 +390,10 @@ function paintWeek(total) {
   }
   el('weekStat').innerHTML = `${weekDone} done <em>of ${weekTotal}</em>`;
 }
-
 function paintList() {
   const list = el('list'); list.innerHTML = '';
   el('empty').hidden = tasks.length > 0;
+  const doneSet = new Set(doneByDate[selKey()] || []);
 
   for (const t of tasks) {
     const li = document.createElement('li');
@@ -479,84 +450,134 @@ function paintList() {
     list.appendChild(li);
   }
 }
+function render() { paintHero(); paintList(); }
 
-function paint() { paintHero(); paintList(); }
-
-/* ---------- actions ---------- */
-async function load() {
-  status('busy', IS_LOCAL ? 'Loading…' : 'Syncing…');
-  confirmingId = null; editingId = null;
+/* ---------- background sync (remote only) ---------- */
+async function pull(k) {
+  status('busy', 'Syncing…');
   try {
-    const r = await backend.getState(dateKey(selected));
-    if (!r || !r.ok) throw new Error(r && r.error ? r.error : 'Could not load');
-    tasks = r.tasks; doneSet = new Set(r.done); weekData = r.week || { counts: {} };
-    paint(); idleStatus();
+    const r = await remote.getState(k);
+    if (!r || !r.ok) throw new Error(r && r.error ? r.error : 'load failed');
+    tasks = r.tasks || [];
+    doneByDate[k] = r.done || [];
+    if (r.week && r.week.counts) Object.assign(weekCounts, r.week.counts);
+    saveCache(); render(); synced();
   } catch (e) {
-    status('err', 'Could not reach your data. Check the Apps Script URL, then retry.');
+    status('', 'Offline — showing your saved copy. It will sync when back online.');
   }
 }
 
-async function onToggle(id) {
-  const nowDone = !doneSet.has(id);
-  const key = dateKey(selected);
-  nowDone ? doneSet.add(id) : doneSet.delete(id);
-  weekData.counts[key] = (weekData.counts[key] || 0) + (nowDone ? 1 : -1);
-  paintHero();
-  status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
-  try {
-    const r = await backend.toggle(id, key, nowDone);
-    if (!r || !r.ok) throw new Error();
-    idleStatus();
-  } catch (e) {
-    nowDone ? doneSet.delete(id) : doneSet.add(id);
-    weekData.counts[key] = (weekData.counts[key] || 0) + (nowDone ? -1 : 1);
-    paintHero();
-    status('err', 'That change did not save. Try again.');
-  }
+/* ---------- actions (instant UI, background write) ---------- */
+function onToggle(id) {
+  const k = selKey();
+  const arr = doneByDate[k] ? doneByDate[k].slice() : [];
+  const has = arr.includes(id);
+  const nowDone = !has;
+  if (nowDone) arr.push(id); else arr.splice(arr.indexOf(id), 1);
+  doneByDate[k] = arr;
+  weekCounts[k] = Math.max(0, (weekCounts[k] || 0) + (nowDone ? 1 : -1));
+  saveCache(); paintHero(); paintList();
+
+  if (IS_LOCAL) { idleLocal(); return; }
+  status('busy', 'Syncing…');
+  remote.toggle(id, k, nowDone)
+    .then(r => { if (!r || !r.ok) throw new Error(); synced(); })
+    .catch(() => {
+      const a = doneByDate[k] || [];
+      const i = a.indexOf(id);
+      if (nowDone) { if (i >= 0) a.splice(i, 1); } else { a.push(id); }
+      weekCounts[k] = Math.max(0, (weekCounts[k] || 0) + (nowDone ? -1 : 1));
+      saveCache(); paintHero(); paintList();
+      status('err', 'That change did not save. Try again.');
+    });
 }
 
 async function onAdd() {
   const val = el('input').value.trim();
   if (!val) return;
-  el('addBtn').disabled = true; status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  const tempId = uid();
+  tasks.push({ id: tempId, title: val });
+  saveCache(); el('input').value = ''; paintHero(); paintList();
+
+  if (IS_LOCAL) { idleLocal(); el('input').focus(); return; }
+  status('busy', 'Syncing…'); el('addBtn').disabled = true;
   try {
-    const r = await backend.addTask(val);
-    if (!r || !r.ok) throw new Error();
-    el('input').value = ''; await load();
-  } catch (e) { status('err', 'Could not add that task. Try again.'); }
-  finally { el('addBtn').disabled = false; el('input').focus(); }
+    const r = await remote.addTask(val);
+    if (!r || !r.ok || !r.task) throw new Error();
+    const t = tasks.find(x => x.id === tempId); if (t) t.id = r.task.id;
+    Object.keys(doneByDate).forEach(d => { const a = doneByDate[d]; const i = a.indexOf(tempId); if (i >= 0) a[i] = r.task.id; });
+    saveCache(); render(); synced();
+  } catch (e) {
+    tasks = tasks.filter(x => x.id !== tempId);
+    Object.keys(doneByDate).forEach(d => { doneByDate[d] = doneByDate[d].filter(x => x !== tempId); });
+    saveCache(); render(); status('err', 'Could not add that task. Try again.');
+  } finally { el('addBtn').disabled = false; el('input').focus(); }
 }
 
 async function onEdit(id, value) {
   const title = value.trim();
   if (!title) { editingId = null; paintList(); return; }
-  status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  const t = tasks.find(x => x.id === id); const old = t ? t.title : '';
+  if (t) t.title = title;
+  editingId = null; saveCache(); paintList();
+
+  if (IS_LOCAL) { idleLocal(); return; }
+  status('busy', 'Syncing…');
   try {
-    const r = await backend.editTask(id, title);
+    const r = await remote.editTask(id, title);
     if (!r || !r.ok) throw new Error();
-    editingId = null; await load();
-  } catch (e) { status('err', 'Could not save that change. Try again.'); }
+    synced();
+  } catch (e) {
+    if (t) t.title = old; saveCache(); paintList();
+    status('err', 'Could not save that change. Try again.');
+  }
 }
 
 async function onDelete(id) {
-  confirmingId = null; status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  confirmingId = null;
+  const idx = tasks.findIndex(x => x.id === id);
+  const removed = idx >= 0 ? tasks[idx] : null;
+  const affected = [];
+  Object.keys(doneByDate).forEach(d => {
+    const a = doneByDate[d]; const i = a.indexOf(id);
+    if (i >= 0) { a.splice(i, 1); weekCounts[d] = Math.max(0, (weekCounts[d] || 0) - 1); affected.push(d); }
+  });
+  if (idx >= 0) tasks.splice(idx, 1);
+  saveCache(); paintHero(); paintList();
+
+  if (IS_LOCAL) { idleLocal(); return; }
+  status('busy', 'Syncing…');
   try {
-    const r = await backend.deleteTask(id);
+    const r = await remote.deleteTask(id);
     if (!r || !r.ok) throw new Error();
-    await load();
-  } catch (e) { status('err', 'Could not remove that task. Try again.'); }
+    synced();
+  } catch (e) {
+    if (removed) tasks.splice(idx, 0, removed);
+    affected.forEach(d => { (doneByDate[d] = doneByDate[d] || []).push(id); weekCounts[d] = (weekCounts[d] || 0) + 1; });
+    saveCache(); paintHero(); paintList();
+    status('err', 'Could not remove that task. Try again.');
+  }
 }
 
-function shiftDay(delta) { selected = addDays(selected, delta); load(); }
+function shiftDay(delta) {
+  selected = addDays(selected, delta);
+  paintHero(); paintList();          // instant from cache
+  if (!IS_LOCAL) pull(selKey());     // refresh in background
+}
 
 /* ---------- wire up ---------- */
 el('prev').addEventListener('click', () => shiftDay(-1));
 el('next').addEventListener('click', () => shiftDay(1));
-el('backToday').addEventListener('click', () => { selected = new Date(); load(); });
+el('backToday').addEventListener('click', () => { selected = new Date(); paintHero(); paintList(); if (!IS_LOCAL) pull(selKey()); });
 el('addBtn').addEventListener('click', onAdd);
 el('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') onAdd(); });
 
-load();
+/* ---------- init: render cache instantly, then sync ---------- */
+const hadCache = loadCache();
+if (IS_LOCAL && !hadCache) { tasks = STARTER_TASKS.map(t => ({ id: uid(), title: t })); saveCache(); }
+render();
+if (IS_LOCAL) idleLocal(); else pull(selKey());
+
 </script>
 </body>
 </html>
