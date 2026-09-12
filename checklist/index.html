@@ -1,1 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ===== Configuration is in the <script> at the bottom (CONFIG) ===== */
+  :root {
+    --bg: #F1F4EF;
+    --surface: #FFFFFF;
+    --ink: #171A16;
+    --muted: #5D6357;
+    --faint: #9BA192;
+    --line: #E5E9DF;
+    --line-soft: #EEF1EA;
+    --accent: #1F7A54;
+    --accent-deep: #196343;
+    --accent-soft: #E2EFE8;
+    --ring-track: #E7EBE1;
+    --danger: #B23B3B;
+    --danger-soft: #EBD3D3;
+    --shadow: 0 1px 2px rgba(23,26,22,.04), 0 12px 30px -12px rgba(23,26,22,.14);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 500px at 50% -280px, #E7EEE4 0%, rgba(231,238,228,0) 70%),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.4;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 540px; margin: 0 auto; padding: 36px 18px 72px; }
 
+  /* ===== Hero / stats card ===== */
+  .hero {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    padding: 22px 22px 20px;
+  }
+  .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .weekday {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(30px, 8.5vw, 42px);
+    line-height: .98;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .fulldate { font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+  .back-today {
+    margin-top: 8px; font-size: 13px; color: var(--accent);
+    background: none; border: none; padding: 0; cursor: pointer;
+  }
+  .back-today:hover { text-decoration: underline; }
+  .back-today[hidden] { display: none; }
+
+  .nav { display: flex; gap: 6px; flex: none; }
+  .nav-btn {
+    width: 36px; height: 36px; border: 1px solid var(--line);
+    background: var(--surface); border-radius: 10px; color: var(--muted);
+    font-size: 17px; cursor: pointer; display: grid; place-items: center;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* today's ring + stat readouts */
+  .hero-mid {
+    display: flex; align-items: center; gap: 20px;
+    margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line-soft);
+  }
+  .ring { flex: none; width: 96px; height: 96px; position: relative; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .track { stroke: var(--ring-track); }
+  .ring .bar {
+    stroke: var(--accent); stroke-linecap: round;
+    transition: stroke-dashoffset .5s cubic-bezier(.4,0,.2,1);
+  }
+  .ring-center {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-family: 'Fraunces', Georgia, serif; line-height: 1;
+  }
+  .ring-center b { font-size: 26px; font-weight: 600; color: var(--accent-deep); }
+  .ring-center span { font-size: 15px; color: var(--faint); }
+
+  .readouts { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .readout .k { font-size: 12.5px; color: var(--muted); }
+  .readout .v { font-size: 17px; font-weight: 500; margin-top: 1px; }
+  .readout .v em { font-style: normal; color: var(--faint); font-weight: 450; }
+
+  /* week strip */
+  .week {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-soft);
+  }
+  .day { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .day .pie {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid var(--ring-track); background: transparent;
+  }
+  .day .pie.filled { border-color: transparent; }
+  .day.today .pie { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+  .day.sel:not(.today) .pie { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--line); }
+  .day .dl { font-size: 11px; color: var(--faint); }
+  .day.today .dl { color: var(--accent); font-weight: 600; }
+  .day.future .pie { border-color: var(--line-soft); }
+  .day.future .dl { color: #C4C9BC; }
+
+  /* ===== Task list ===== */
+  .list-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 18px; overflow: hidden; margin-top: 16px;
+  }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  li.task { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
+  li.task:last-child { border-bottom: none; }
+
+  .check {
+    flex: none; width: 24px; height: 24px; border: 2px solid #C4CABB;
+    border-radius: 50%; background: transparent; cursor: pointer;
+    display: grid; place-items: center; padding: 0;
+    transition: border-color .15s, background .15s, transform .1s;
+  }
+  .check:hover { border-color: var(--accent); }
+  .check:active { transform: scale(.9); }
+  .check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .check svg { width: 13px; height: 13px; stroke: #fff; opacity: 0; transition: opacity .15s; }
+  .task.done .check { background: var(--accent); border-color: var(--accent); }
+  .task.done .check svg { opacity: 1; }
+
+  .title { flex: 1; font-size: 15.5px; cursor: pointer; word-break: break-word; }
+  .task.done .title { color: var(--faint); text-decoration: line-through; }
+
+  .actions { flex: none; display: flex; gap: 2px; }
+  .icon-btn {
+    background: none; border: none; color: var(--faint); cursor: pointer;
+    font-size: 15px; padding: 5px; line-height: 1; border-radius: 8px;
+    opacity: .5; transition: opacity .15s, color .15s, background .15s;
+  }
+  li.task:hover .icon-btn, .icon-btn:focus-visible { opacity: 1; }
+  .icon-btn:hover { background: var(--line-soft); }
+  .icon-btn.del:hover { color: var(--danger); }
+  .icon-btn.edit:hover { color: var(--accent); }
+
+  /* inline edit + confirm */
+  .edit-row { flex: 1; display: flex; gap: 8px; align-items: center; }
+  .edit-row input {
+    flex: 1; border: 1px solid var(--accent); background: var(--surface);
+    border-radius: 10px; padding: 9px 11px; font-size: 15px; font-family: inherit; color: var(--ink);
+  }
+  .edit-row input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .mini { font-size: 13px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 8px 11px; cursor: pointer; font-family: inherit; }
+  .mini.save { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+  .mini.save:hover { background: var(--accent-deep); }
+  .confirm { display: flex; gap: 7px; align-items: center; }
+  .confirm span { font-size: 13px; color: var(--muted); }
+  .confirm .yes { color: var(--danger); border-color: var(--danger-soft); }
+
+  .empty { padding: 36px 20px; text-align: center; color: var(--muted); font-size: 14.5px; }
+
+  /* add bar */
+  .add { display: flex; gap: 8px; margin-top: 14px; }
+  .add input {
+    flex: 1; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 12px; padding: 13px 14px; font-size: 15px; font-family: inherit; color: var(--ink);
+  }
+  .add input::placeholder { color: var(--faint); }
+  .add input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .add button {
+    flex: none; border: none; background: var(--accent); color: #fff;
+    border-radius: 12px; padding: 0 20px; font-size: 15px; font-weight: 500;
+    font-family: inherit; cursor: pointer; transition: background .15s;
+  }
+  .add button:hover { background: var(--accent-deep); }
+  .add button:disabled { opacity: .5; cursor: default; }
+
+  /* footer status */
+  .foot {
+    margin-top: 20px; font-size: 12.5px; color: var(--faint);
+    display: flex; align-items: center; gap: 7px; justify-content: center;
+    min-height: 18px; text-align: center; padding: 0 8px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.ok { background: var(--accent); }
+  .dot.busy { background: #E0A73B; }
+  .dot.err { background: var(--danger); }
+
+  @media (max-width: 400px) {
+    .hero-mid { gap: 14px; }
+    .ring { width: 84px; height: 84px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <h1 class="weekday" id="weekday">—</h1>
+          <div class="fulldate" id="fulldate"></div>
+          <button class="back-today" id="backToday" hidden>Back to today</button>
+        </div>
+        <div class="nav">
+          <button class="nav-btn" id="prev" aria-label="Previous day">‹</button>
+          <button class="nav-btn" id="next" aria-label="Next day">›</button>
+        </div>
+      </div>
+
+      <div class="hero-mid">
+        <div class="ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="track" cx="50" cy="50" r="42" fill="none" stroke-width="9"/>
+            <circle class="bar" id="ringBar" cx="50" cy="50" r="42" fill="none" stroke-width="9"
+                    stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+          </svg>
+          <div class="ring-center"><b id="ringDone">0</b><span id="ringTotal">/0</span></div>
+        </div>
+        <div class="readouts">
+          <div class="readout">
+            <div class="k">Today</div>
+            <div class="v" id="todayStat">0 done <em>of 0</em></div>
+          </div>
+          <div class="readout">
+            <div class="k">This week</div>
+            <div class="v" id="weekStat">0 done <em>of 0</em></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="week" id="week"></div>
+    </section>
+
+    <section class="list-card">
+      <ul class="list" id="list"></ul>
+      <div class="empty" id="empty" hidden>No tasks yet. Add the first thing you want to do every day.</div>
+    </section>
+
+    <div class="add">
+      <input id="input" type="text" placeholder="Add a task for your day" autocomplete="off" />
+      <button id="addBtn">Add</button>
+    </div>
+
+    <div class="foot" id="foot"><span class="dot" id="dot"></span><span id="footText">Loading…</span></div>
+  </main>
+
+<script>
+/* ============================================================
+   CONFIGURATION
+   After deploying Code.gs as a Web app, paste the /exec URL below.
+   Leave API_URL empty to run in local mode (saved in this browser).
+   ============================================================ */
+const CONFIG = {
+  API_URL: 'https://script.google.com/macros/s/AKfycbyEZM84Y4VUhiChLQ9TFntARxWs18yThUpNuqDkNxDCa2UHFlZo6th5XMJtwqrWML6_Eg/exec',   // e.g. 'https://script.google.com/macros/s/AKfyc.../exec'
+  TOKEN: ''      // only if you set SECRET in Code.gs
+};
+
+const STARTER_TASKS = ['Drink 2 litres of water', 'Walk 5,000 steps'];
+
+/* ---------- date helpers (local) ---------- */
+function dateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function mondayOf(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  const dow = (x.getDay() + 6) % 7; // Monday = 0
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function isSameDay(a, b) { return dateKey(a) === dateKey(b); }
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/* ---------- backend: remote (Apps Script) or local ---------- */
+async function apiGet(action, extra) {
+  const u = new URL(CONFIG.API_URL);
+  u.searchParams.set('action', action);
+  if (CONFIG.TOKEN) u.searchParams.set('token', CONFIG.TOKEN);
+  Object.entries(extra || {}).forEach(([k, v]) => u.searchParams.set(k, v));
+  const r = await fetch(u.toString());
+  return r.json();
+}
+async function apiPost(payload) {
+  if (CONFIG.TOKEN) payload.token = CONFIG.TOKEN;
+  const r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify(payload) });
+  return r.json();
+}
+const remote = {
+  getState: (date) => apiGet('getState', { date }),
+  addTask:  (title) => apiPost({ action: 'addTask', title }),
+  editTask: (id, title) => apiPost({ action: 'editTask', id, title }),
+  deleteTask: (id) => apiPost({ action: 'deleteTask', id }),
+  toggle: (taskId, date, done) => apiPost({ action: 'toggle', taskId, date, done })
+};
+
+const LS_TASKS = 'dc_tasks', LS_LOG = 'dc_log', LS_INIT = 'dc_init';
+const lsTasks = () => JSON.parse(localStorage.getItem(LS_TASKS) || '[]');
+const lsLog   = () => JSON.parse(localStorage.getItem(LS_LOG) || '{}');
+const uid = () => 't' + Date.now() + Math.random().toString(36).slice(2, 6);
+function seedLocal() {
+  if (localStorage.getItem(LS_INIT)) return;
+  localStorage.setItem(LS_TASKS, JSON.stringify(STARTER_TASKS.map(t => ({ id: uid(), title: t }))));
+  localStorage.setItem(LS_INIT, '1');
+}
+function weekCounts(date) {
+  const log = lsLog(); const mon = mondayOf(date); const counts = {};
+  for (let i = 0; i < 7; i++) { const k = dateKey(addDays(mon, i)); counts[k] = (log[k] || []).length; }
+  return counts;
+}
+const local = {
+  async getState(date) {
+    const log = lsLog(); const d = new Date(date + 'T00:00:00');
+    return { ok: true, tasks: lsTasks(), done: log[date] || [], week: { counts: weekCounts(d) } };
+  },
+  async addTask(title) {
+    const t = { id: uid(), title: title.trim() };
+    const a = lsTasks(); a.push(t); localStorage.setItem(LS_TASKS, JSON.stringify(a));
+    return { ok: true, task: t };
+  },
+  async editTask(id, title) {
+    const a = lsTasks().map(t => t.id === id ? { ...t, title: title.trim() } : t);
+    localStorage.setItem(LS_TASKS, JSON.stringify(a));
+    return { ok: true };
+  },
+  async deleteTask(id) {
+    localStorage.setItem(LS_TASKS, JSON.stringify(lsTasks().filter(t => t.id !== id)));
+    const log = lsLog(); Object.keys(log).forEach(d => { log[d] = log[d].filter(x => x !== id); });
+    localStorage.setItem(LS_LOG, JSON.stringify(log));
+    return { ok: true };
+  },
+  async toggle(taskId, date, done) {
+    const log = lsLog(); const set = new Set(log[date] || []);
+    done ? set.add(taskId) : set.delete(taskId);
+    log[date] = [...set]; localStorage.setItem(LS_LOG, JSON.stringify(log));
+    return { ok: true };
+  }
+};
+const IS_LOCAL = !CONFIG.API_URL;
+const backend = IS_LOCAL ? local : remote;
+if (IS_LOCAL) seedLocal();
+
+/* ---------- state ---------- */
+let selected = new Date();
+let tasks = [];
+let doneSet = new Set();
+let weekData = { counts: {} };
+let confirmingId = null;
+let editingId = null;
+
+const el = (id) => document.getElementById(id);
+const RING_C = 2 * Math.PI * 42;
+
+function status(kind, text) { el('dot').className = 'dot ' + (kind || ''); el('footText').textContent = text; }
+function idleStatus() {
+  if (IS_LOCAL) status('', 'Saved in this browser. Add your Apps Script URL to sync across devices.');
+  else status('ok', 'Synced');
+}
+
+/* ---------- render ---------- */
+function doneCount() { const ids = new Set(tasks.map(t => t.id)); let n = 0; doneSet.forEach(id => { if (ids.has(id)) n++; }); return n; }
+
+function paintHero() {
+  el('weekday').textContent = WEEKDAYS[selected.getDay()];
+  el('fulldate').textContent = `${selected.getDate()} ${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`;
+  el('backToday').hidden = isSameDay(selected, new Date());
+
+  const total = tasks.length, done = doneCount();
+  const pct = total ? done / total : 0;
+  el('ringBar').style.strokeDashoffset = (RING_C * (1 - pct)).toFixed(2);
+  el('ringBar').setAttribute('stroke-dasharray', RING_C.toFixed(2));
+  el('ringDone').textContent = done;
+  el('ringTotal').textContent = '/' + total;
+  el('todayStat').innerHTML = `${done} done <em>of ${total}</em>`;
+
+  paintWeek(total);
+}
+
+function paintWeek(total) {
+  const mon = mondayOf(selected);
+  const todayKey = dateKey(new Date());
+  const selKey = dateKey(selected);
+  const initials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  let weekDone = 0, weekTotal = 0;
+  const box = el('week'); box.innerHTML = '';
+
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(mon, i); const key = dateKey(d);
+    const doneN = weekData.counts[key] || 0;
+    const future = key > todayKey;
+    if (!future) { weekDone += doneN; weekTotal += total; }
+    const ratio = total ? Math.min(1, doneN / total) : 0;
+
+    const cell = document.createElement('div');
+    cell.className = 'day' + (key === todayKey ? ' today' : '') + (key === selKey ? ' sel' : '') + (future ? ' future' : '');
+    const pie = document.createElement('div');
+    pie.className = 'pie' + (ratio > 0 ? ' filled' : '');
+    if (ratio > 0) {
+      const pct = Math.round(ratio * 100);
+      pie.style.background = `conic-gradient(var(--accent) ${pct}%, var(--ring-track) 0)`;
+    }
+    const label = document.createElement('div');
+    label.className = 'dl'; label.textContent = initials[i];
+    cell.appendChild(pie); cell.appendChild(label); box.appendChild(cell);
+  }
+  el('weekStat').innerHTML = `${weekDone} done <em>of ${weekTotal}</em>`;
+}
+
+function paintList() {
+  const list = el('list'); list.innerHTML = '';
+  el('empty').hidden = tasks.length > 0;
+
+  for (const t of tasks) {
+    const li = document.createElement('li');
+
+    if (editingId === t.id) {
+      li.className = 'task editing';
+      const wrap = document.createElement('div'); wrap.className = 'edit-row';
+      const input = document.createElement('input'); input.type = 'text'; input.value = t.title;
+      const save = document.createElement('button'); save.className = 'mini save'; save.textContent = 'Save';
+      const cancel = document.createElement('button'); cancel.className = 'mini'; cancel.textContent = 'Cancel';
+      save.addEventListener('click', () => onEdit(t.id, input.value));
+      cancel.addEventListener('click', () => { editingId = null; paintList(); });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') onEdit(t.id, input.value);
+        if (e.key === 'Escape') { editingId = null; paintList(); }
+      });
+      wrap.appendChild(input); wrap.appendChild(save); wrap.appendChild(cancel);
+      li.appendChild(wrap); list.appendChild(li);
+      setTimeout(() => { input.focus(); input.select(); }, 0);
+      continue;
+    }
+
+    li.className = 'task' + (doneSet.has(t.id) ? ' done' : '');
+    const check = document.createElement('button');
+    check.className = 'check'; check.setAttribute('aria-label', 'Mark done');
+    check.setAttribute('aria-pressed', doneSet.has(t.id));
+    check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>';
+    check.addEventListener('click', () => onToggle(t.id));
+
+    const title = document.createElement('span');
+    title.className = 'title'; title.textContent = t.title;
+    title.addEventListener('click', () => onToggle(t.id));
+
+    li.appendChild(check); li.appendChild(title);
+
+    if (confirmingId === t.id) {
+      const box = document.createElement('div'); box.className = 'confirm';
+      box.innerHTML = '<span>Remove?</span>';
+      const yes = document.createElement('button'); yes.className = 'mini yes'; yes.textContent = 'Remove';
+      const no = document.createElement('button'); no.className = 'mini'; no.textContent = 'Keep';
+      yes.addEventListener('click', () => onDelete(t.id));
+      no.addEventListener('click', () => { confirmingId = null; paintList(); });
+      box.appendChild(yes); box.appendChild(no); li.appendChild(box);
+    } else {
+      const actions = document.createElement('div'); actions.className = 'actions';
+      const edit = document.createElement('button'); edit.className = 'icon-btn edit';
+      edit.setAttribute('aria-label', 'Edit task'); edit.textContent = '✎';
+      edit.addEventListener('click', () => { editingId = t.id; confirmingId = null; paintList(); });
+      const del = document.createElement('button'); del.className = 'icon-btn del';
+      del.setAttribute('aria-label', 'Remove task'); del.textContent = '✕';
+      del.addEventListener('click', () => { confirmingId = t.id; editingId = null; paintList(); });
+      actions.appendChild(edit); actions.appendChild(del); li.appendChild(actions);
+    }
+    list.appendChild(li);
+  }
+}
+
+function paint() { paintHero(); paintList(); }
+
+/* ---------- actions ---------- */
+async function load() {
+  status('busy', IS_LOCAL ? 'Loading…' : 'Syncing…');
+  confirmingId = null; editingId = null;
+  try {
+    const r = await backend.getState(dateKey(selected));
+    if (!r || !r.ok) throw new Error(r && r.error ? r.error : 'Could not load');
+    tasks = r.tasks; doneSet = new Set(r.done); weekData = r.week || { counts: {} };
+    paint(); idleStatus();
+  } catch (e) {
+    status('err', 'Could not reach your data. Check the Apps Script URL, then retry.');
+  }
+}
+
+async function onToggle(id) {
+  const nowDone = !doneSet.has(id);
+  const key = dateKey(selected);
+  nowDone ? doneSet.add(id) : doneSet.delete(id);
+  weekData.counts[key] = (weekData.counts[key] || 0) + (nowDone ? 1 : -1);
+  paintHero();
+  status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  try {
+    const r = await backend.toggle(id, key, nowDone);
+    if (!r || !r.ok) throw new Error();
+    idleStatus();
+  } catch (e) {
+    nowDone ? doneSet.delete(id) : doneSet.add(id);
+    weekData.counts[key] = (weekData.counts[key] || 0) + (nowDone ? -1 : 1);
+    paintHero();
+    status('err', 'That change did not save. Try again.');
+  }
+}
+
+async function onAdd() {
+  const val = el('input').value.trim();
+  if (!val) return;
+  el('addBtn').disabled = true; status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  try {
+    const r = await backend.addTask(val);
+    if (!r || !r.ok) throw new Error();
+    el('input').value = ''; await load();
+  } catch (e) { status('err', 'Could not add that task. Try again.'); }
+  finally { el('addBtn').disabled = false; el('input').focus(); }
+}
+
+async function onEdit(id, value) {
+  const title = value.trim();
+  if (!title) { editingId = null; paintList(); return; }
+  status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  try {
+    const r = await backend.editTask(id, title);
+    if (!r || !r.ok) throw new Error();
+    editingId = null; await load();
+  } catch (e) { status('err', 'Could not save that change. Try again.'); }
+}
+
+async function onDelete(id) {
+  confirmingId = null; status('busy', IS_LOCAL ? 'Saving…' : 'Syncing…');
+  try {
+    const r = await backend.deleteTask(id);
+    if (!r || !r.ok) throw new Error();
+    await load();
+  } catch (e) { status('err', 'Could not remove that task. Try again.'); }
+}
+
+function shiftDay(delta) { selected = addDays(selected, delta); load(); }
+
+/* ---------- wire up ---------- */
+el('prev').addEventListener('click', () => shiftDay(-1));
+el('next').addEventListener('click', () => shiftDay(1));
+el('backToday').addEventListener('click', () => { selected = new Date(); load(); });
+el('addBtn').addEventListener('click', onAdd);
+el('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') onAdd(); });
+
+load();
+</script>
+</body>
+</html>
