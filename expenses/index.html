@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Expenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ===== Configuration is in the <script> at the bottom (CONFIG) ===== */
+  :root {
+    --bg: #F1F4F3; --surface: #FFFFFF; --ink: #16201F; --muted: #586360; --faint: #97A19E;
+    --line: #E4E9E7; --line-soft: #EEF1F0;
+    --accent: #0E7490; --accent-deep: #0B5B6B; --accent-soft: #E1EFF2;
+    --danger: #B23B3B; --danger-soft: #EBD3D3;
+    --shadow: 0 1px 2px rgba(22,32,31,.04), 0 12px 30px -12px rgba(22,32,31,.16);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 500px at 50% -280px, #E4EEEC 0%, rgba(228,238,236,0) 70%), var(--bg);
+    color: var(--ink); font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.4; min-height: 100vh;
+  }
+  .wrap { max-width: 540px; margin: 0 auto; padding: 36px 18px 72px; }
+
+  /* hero */
+  .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); padding: 20px 22px; }
+  .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .weekday { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(26px, 7vw, 36px); line-height: .98; letter-spacing: -0.015em; margin: 0; }
+  .fulldate { font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+  .back-today { margin-top: 8px; font-size: 13px; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; }
+  .back-today:hover { text-decoration: underline; }
+  .back-today[hidden] { display: none; }
+  .nav { display: flex; align-items: center; gap: 6px; flex: none; }
+  .date-input { font-family: inherit; font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 7px 9px; cursor: pointer; }
+  .date-input:focus { outline: none; border-color: var(--accent); }
+  .nav-btn { width: 36px; height: 36px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; color: var(--muted); font-size: 17px; cursor: pointer; display: grid; place-items: center; transition: border-color .15s, color .15s, background .15s; }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* summary card with dropdown */
+  .summary { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 18px 20px 20px; margin-top: 16px; }
+  .sum-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .period-select {
+    font-family: inherit; font-size: 14px; font-weight: 500; color: var(--ink);
+    border: 1px solid var(--line); background: var(--surface); border-radius: 11px;
+    padding: 9px 34px 9px 13px; cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23586360' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  .period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .period-range { font-size: 13px; color: var(--muted); text-align: right; }
+  .sum-total { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(38px, 12vw, 52px); line-height: 1; color: var(--accent-deep); margin-top: 16px; word-break: break-word; }
+
+  /* list */
+  .section-label { font-size: 12.5px; color: var(--muted); margin: 20px 4px 8px; }
+  .list-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  li.exp { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); }
+  li.exp:last-child { border-bottom: none; }
+  .exp-left { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+  .exp-date { flex: none; font-size: 12px; color: var(--faint); min-width: 42px; }
+  .exp-desc { font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp-desc.muted { color: var(--faint); }
+  .exp-amt { flex: none; font-size: 15.5px; font-weight: 600; }
+  .actions { flex: none; display: flex; gap: 2px; }
+  .icon-btn { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 14px; padding: 5px; line-height: 1; border-radius: 8px; opacity: .55; transition: opacity .15s, color .15s, background .15s; }
+  li.exp:hover .icon-btn, .icon-btn:focus-visible { opacity: 1; }
+  .icon-btn:hover { background: var(--line-soft); }
+  .icon-btn.del:hover { color: var(--danger); }
+  .icon-btn.edit:hover { color: var(--accent); }
+  .confirm { display: flex; gap: 7px; align-items: center; }
+  .confirm span { font-size: 13px; color: var(--muted); }
+  .mini { font-size: 13px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 10px; cursor: pointer; font-family: inherit; }
+  .mini.yes { color: var(--danger); border-color: var(--danger-soft); }
+  .empty { padding: 30px 20px; text-align: center; color: var(--muted); font-size: 14.5px; }
+
+  /* add card */
+  .add-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; margin-top: 16px; padding: 16px; }
+  .desc-input { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 13px 14px; font-size: 15px; font-family: inherit; color: var(--ink); }
+  .desc-input::placeholder { color: var(--faint); }
+  .desc-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .amount-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-top: 10px; }
+  .amount-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .amount-row .cur { font-family: 'Fraunces', Georgia, serif; font-size: 24px; color: var(--accent-deep); }
+  .amount-row input { flex: 1; border: none; outline: none; background: none; font-family: 'Fraunces', Georgia, serif; font-size: 26px; font-weight: 500; color: var(--ink); width: 100%; }
+  .amount-row input::placeholder { color: var(--faint); }
+  .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .btn-primary { flex: 1; border: none; background: var(--accent); color: #fff; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background .15s; }
+  .btn-primary:hover { background: var(--accent-deep); }
+  .cancel-edit { background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; padding: 8px; font-family: inherit; }
+  .cancel-edit[hidden] { display: none; }
+
+  /* footer */
+  .foot { margin-top: 20px; font-size: 12.5px; color: var(--faint); display: flex; align-items: center; gap: 7px; justify-content: center; min-height: 18px; text-align: center; padding: 0 8px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.ok { background: var(--accent); } .dot.busy { background: #E0A73B; } .dot.err { background: var(--danger); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <h1 class="weekday" id="weekday">—</h1>
+          <div class="fulldate" id="fulldate"></div>
+          <button class="back-today" id="backToday" hidden>Back to today</button>
+        </div>
+        <div class="nav">
+          <input class="date-input" id="dateInput" type="date" aria-label="Pick a date" />
+          <button class="nav-btn" id="prev" aria-label="Previous day">‹</button>
+          <button class="nav-btn" id="next" aria-label="Next day">›</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary">
+      <div class="sum-top">
+        <select class="period-select" id="period" aria-label="Period">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <div class="period-range" id="periodRange">Today</div>
+      </div>
+      <div class="sum-total" id="periodTotal">₹0</div>
+    </section>
+
+    <div class="section-label" id="listLabel">Expenses</div>
+    <section class="list-card">
+      <ul class="list" id="list"></ul>
+      <div class="empty" id="empty" hidden>No expenses here yet. Add one below.</div>
+    </section>
+
+    <section class="add-card">
+      <input id="desc" class="desc-input" type="text" placeholder="Kis cheez par? (e.g., Chai, Petrol, Bijli bill)" autocomplete="off" />
+      <div class="amount-row">
+        <span class="cur">₹</span>
+        <input id="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="0" />
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" id="addBtn">Add expense</button>
+        <button class="cancel-edit" id="cancelEdit" hidden>Cancel</button>
+      </div>
+    </section>
+
+    <div class="foot" id="foot"><span class="dot" id="dot"></span><span id="footText">Loading…</span></div>
+  </main>
+
+<script>
+/* ============================================================
+   CONFIGURATION
+   Deploy the expenses Code.gs (in a NEW Google Sheet) as a Web app,
+   then paste its /exec URL below. Leave empty for local mode.
+   ============================================================ */
+const CONFIG = {
+  API_URL: '',   // e.g. 'https://script.google.com/macros/s/AKfyc.../exec'
+  TOKEN: ''      // only if you set SECRET in Code.gs
+};
+
+const IS_LOCAL = !CONFIG.API_URL;
+
+/* ---------- date + money helpers ---------- */
+function dateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function mondayOf(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  const dow = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function isSameDay(a, b) { return dateKey(a) === dateKey(b); }
+function parseKey(k) { return new Date(k + 'T00:00:00'); }
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MON3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function inr(n) { n = Number(n) || 0; return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
+function shortDate(k) { const d = parseKey(k); return `${d.getDate()} ${MON3[d.getMonth()]}`; }
+
+/* ---------- remote API ---------- */
+async function apiGet(action, extra) {
+  const u = new URL(CONFIG.API_URL);
+  u.searchParams.set('action', action);
+  if (CONFIG.TOKEN) u.searchParams.set('token', CONFIG.TOKEN);
+  Object.entries(extra || {}).forEach(([k, v]) => u.searchParams.set(k, v));
+  const r = await fetch(u.toString());
+  return r.json();
+}
+async function apiPost(payload) {
+  if (CONFIG.TOKEN) payload.token = CONFIG.TOKEN;
+  const r = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify(payload) });
+  return r.json();
+}
+const remote = {
+  getState: (date) => apiGet('getState', { date }),
+  addExpense: (date, amount, description) => apiPost({ action: 'addExpense', date, amount, description }),
+  editExpense: (id, amount, description) => apiPost({ action: 'editExpense', id, amount, description }),
+  deleteExpense: (id) => apiPost({ action: 'deleteExpense', id })
+};
+
+/* ---------- cache: one entries map ---------- */
+const CACHE_KEY = 'dex_cache';
+let entries = {};
+const uid = () => 'e' + Date.now() + Math.random().toString(36).slice(2, 6);
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (c && c.v === 2 && Array.isArray(c.entries)) { c.entries.forEach(e => entries[e.id] = e); return true; }
+  } catch (e) {}
+  return false;
+}
+function saveCache() { localStorage.setItem(CACHE_KEY, JSON.stringify({ v: 2, entries: Object.values(entries) })); }
+
+/* ---------- state ---------- */
+let selected = new Date();
+let period = localStorage.getItem('dex_period') || 'daily';   // daily | weekly | monthly
+let editingId = null;
+let confirmingId = null;
+const PMAP = { daily: 'day', weekly: 'week', monthly: 'month' };
+const el = (id) => document.getElementById(id);
+const selKey = () => dateKey(selected);
+
+/* ---------- status ---------- */
+function status(kind, text) { el('dot').className = 'dot ' + (kind || ''); el('footText').textContent = text; }
+function synced() { status('ok', 'Synced'); }
+function idleLocal() { status('', 'Saved in this browser. Add your Apps Script URL to sync across devices.'); }
+
+/* ---------- period selectors ---------- */
+function periodEntries(p) {
+  const all = Object.values(entries);
+  if (p === 'day') { const k = selKey(); return all.filter(e => e.date === k); }
+  if (p === 'week') {
+    const mon = mondayOf(selected); const a = dateKey(mon), b = dateKey(addDays(mon, 6));
+    return all.filter(e => e.date >= a && e.date <= b);
+  }
+  const mk = selKey().slice(0, 7);
+  return all.filter(e => e.date.slice(0, 7) === mk);
+}
+function sum(list) { return list.reduce((s, e) => s + (Number(e.amount) || 0), 0); }
+
+function rangeLabel() {
+  if (period === 'daily') return isSameDay(selected, new Date()) ? 'Today' : `${selected.getDate()} ${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`;
+  if (period === 'weekly') { const mon = mondayOf(selected); return `${shortDate(dateKey(mon))} – ${shortDate(dateKey(addDays(mon, 6)))}`; }
+  return `${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`;
+}
+
+/* ---------- render ---------- */
+function paintHero() {
+  el('weekday').textContent = WEEKDAYS[selected.getDay()];
+  el('fulldate').textContent = `${selected.getDate()} ${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`;
+  el('backToday').hidden = isSameDay(selected, new Date());
+  el('dateInput').value = selKey();
+}
+function paintSummary() {
+  el('period').value = period;
+  el('periodRange').textContent = rangeLabel();
+  el('periodTotal').textContent = inr(sum(periodEntries(PMAP[period])));
+  el('listLabel').textContent =
+    period === 'daily' ? 'Expenses' : period === 'weekly' ? "This week's expenses" : "This month's expenses";
+}
+function paintList() {
+  const list = el('list'); list.innerHTML = '';
+  const raw = periodEntries(PMAP[period]);
+  const items = (period === 'daily')
+    ? raw.slice().reverse()
+    : raw.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  el('empty').hidden = items.length > 0;
+
+  for (const e of items) {
+    const li = document.createElement('li'); li.className = 'exp';
+    const left = document.createElement('div'); left.className = 'exp-left';
+    if (period !== 'daily') {
+      const dt = document.createElement('span'); dt.className = 'exp-date'; dt.textContent = shortDate(e.date);
+      left.appendChild(dt);
+    }
+    const desc = document.createElement('span'); desc.className = 'exp-desc';
+    desc.textContent = e.description || 'Expense';
+    if (!e.description) desc.classList.add('muted');
+    left.appendChild(desc);
+
+    const amt = document.createElement('div'); amt.className = 'exp-amt'; amt.textContent = inr(e.amount);
+    li.appendChild(left); li.appendChild(amt);
+
+    if (confirmingId === e.id) {
+      const box = document.createElement('div'); box.className = 'confirm';
+      box.innerHTML = '<span>Delete?</span>';
+      const yes = document.createElement('button'); yes.className = 'mini yes'; yes.textContent = 'Delete';
+      const no = document.createElement('button'); no.className = 'mini'; no.textContent = 'Keep';
+      yes.addEventListener('click', () => onDelete(e.id));
+      no.addEventListener('click', () => { confirmingId = null; paintList(); });
+      box.appendChild(yes); box.appendChild(no); li.appendChild(box);
+    } else {
+      const actions = document.createElement('div'); actions.className = 'actions';
+      const edit = document.createElement('button'); edit.className = 'icon-btn edit'; edit.textContent = '✎'; edit.setAttribute('aria-label', 'Edit');
+      edit.addEventListener('click', () => startEdit(e));
+      const del = document.createElement('button'); del.className = 'icon-btn del'; del.textContent = '✕'; del.setAttribute('aria-label', 'Delete');
+      del.addEventListener('click', () => { confirmingId = e.id; paintList(); });
+      actions.appendChild(edit); actions.appendChild(del); li.appendChild(actions);
+    }
+    list.appendChild(li);
+  }
+}
+function render() { paintHero(); paintSummary(); paintList(); }
+
+/* ---------- form ---------- */
+function startEdit(e) {
+  editingId = e.id; confirmingId = null;
+  el('desc').value = e.description || '';
+  el('amount').value = e.amount;
+  el('addBtn').textContent = 'Save changes';
+  el('cancelEdit').hidden = false;
+  paintList();
+  el('desc').focus();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+function resetForm() {
+  editingId = null;
+  el('desc').value = ''; el('amount').value = '';
+  el('addBtn').textContent = 'Add expense';
+  el('cancelEdit').hidden = true;
+}
+
+/* ---------- background sync ---------- */
+async function pull(k) {
+  status('busy', 'Syncing…');
+  try {
+    const r = await remote.getState(k);
+    if (!r || !r.ok) throw new Error(r && r.error ? r.error : 'load failed');
+    const rs = r.rangeStart, re = r.rangeEnd;
+    Object.values(entries).forEach(e => { if (e.date >= rs && e.date <= re) delete entries[e.id]; });
+    (r.entries || []).forEach(e => { entries[e.id] = e; });
+    saveCache(); render(); synced();
+  } catch (e) {
+    status('', 'Offline — showing your saved copy. It will sync when back online.');
+  }
+}
+
+/* ---------- actions ---------- */
+function onSubmit() {
+  const description = el('desc').value.trim();
+  const amount = parseFloat(el('amount').value);
+  if (!amount || amount <= 0) { status('err', 'Enter an amount.'); el('amount').focus(); return; }
+  if (editingId) return onEdit(editingId, amount, description);
+  return onAdd(amount, description);
+}
+async function onAdd(amount, description) {
+  const date = selKey();
+  const tempId = uid();
+  entries[tempId] = { id: tempId, date, amount, description };
+  saveCache(); resetForm(); render();
+  if (IS_LOCAL) { idleLocal(); el('desc').focus(); return; }
+  status('busy', 'Syncing…');
+  try {
+    const r = await remote.addExpense(date, amount, description);
+    if (!r || !r.ok || !r.entry) throw new Error();
+    if (entries[tempId]) { entries[r.entry.id] = { id: r.entry.id, date, amount, description }; delete entries[tempId]; }
+    saveCache(); render(); synced();
+  } catch (e) {
+    delete entries[tempId]; saveCache(); render();
+    status('err', 'Could not save that expense. Try again.');
+  } finally { el('desc').focus(); }
+}
+async function onEdit(id, amount, description) {
+  const e = entries[id];
+  if (!e) { resetForm(); return; }
+  const old = { amount: e.amount, description: e.description };
+  e.amount = amount; e.description = description;
+  saveCache(); resetForm(); render();
+  if (IS_LOCAL) { idleLocal(); return; }
+  status('busy', 'Syncing…');
+  try {
+    const r = await remote.editExpense(id, amount, description);
+    if (!r || !r.ok) throw new Error();
+    synced();
+  } catch (err) {
+    e.amount = old.amount; e.description = old.description;
+    saveCache(); render(); status('err', 'Could not save that change. Try again.');
+  }
+}
+async function onDelete(id) {
+  confirmingId = null;
+  const removed = entries[id];
+  if (!removed) return;
+  delete entries[id];
+  saveCache(); render();
+  if (IS_LOCAL) { idleLocal(); return; }
+  status('busy', 'Syncing…');
+  try {
+    const r = await remote.deleteExpense(id);
+    if (!r || !r.ok) throw new Error();
+    synced();
+  } catch (e) {
+    entries[removed.id] = removed; saveCache(); render();
+    status('err', 'Could not delete that expense. Try again.');
+  }
+}
+
+function goDate(d) {
+  selected = d; resetForm(); confirmingId = null;
+  render();
+  if (!IS_LOCAL) pull(selKey());
+}
+
+/* ---------- wire up ---------- */
+el('prev').addEventListener('click', () => goDate(addDays(selected, -1)));
+el('next').addEventListener('click', () => goDate(addDays(selected, 1)));
+el('backToday').addEventListener('click', () => goDate(new Date()));
+el('dateInput').addEventListener('change', (e) => { if (e.target.value) goDate(parseKey(e.target.value)); });
+el('period').addEventListener('change', (e) => { period = e.target.value; localStorage.setItem('dex_period', period); confirmingId = null; render(); });
+el('addBtn').addEventListener('click', onSubmit);
+el('cancelEdit').addEventListener('click', () => { resetForm(); });
+el('desc').addEventListener('keydown', (e) => { if (e.key === 'Enter') el('amount').focus(); });
+el('amount').addEventListener('keydown', (e) => { if (e.key === 'Enter') onSubmit(); });
+
+/* ---------- init ---------- */
+loadCache();
+render();
+if (IS_LOCAL) idleLocal(); else pull(selKey());
+</script>
+</body>
+</html>
